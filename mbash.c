@@ -16,14 +16,20 @@
 
 
 
-
-
 // Structure representant 1 commande entré par l'utilisateur
 struct struct_commande {   
     char *commande;         /* la commande en string */
     int taille;               /* taille de la commande*/
     int cursor_pos;         /* position d'un curseur */
 };
+
+// Structure representant 1 token issu d'une commande (transformé en struct_commande au préalable)
+struct struct_token {
+    struct struct_commande *src;       /* source */
+    int    taille;            /* longueur du string */
+    char   *texte;               /* string du token */
+};
+
 
 // Fonctions sur struct_commande --------------------------------------------------------------------
 
@@ -86,82 +92,52 @@ void sauter_espaces(struct struct_commande *src) {
 
 // Fin fonctions sur struct_commande --------------------------------------------------------------------------------------------
 
-// Structure representant 1 token issu d'une commande (transformé en source au préalable)
-struct token_s {
-    struct struct_commande *src;       /* source */
-    int    taille;            /* longueur du string */
-    char   *texte;               /* string du token */
-};
 
+// Fonctions sur struct_token ----------------------------------------------------------------------------------------------
 
 char *token_buffer = NULL;
 int   token_buffersize  = 0;
 int   token_bufferindex = -1;
 
 /* token End Of File */
-struct token_s eof_token =  {
+struct struct_token eof_token =  {
     .taille = 0,
 };
 
-// Créer un token a partir d'une commande
-struct token_s* creer_token(char *str) {
 
-    struct token_s *tok = malloc(sizeof(struct token_s));
-    
-    if(!tok) {
-        return NULL;
-    }
+// Créer un token a partir d'un mot (une fonction ou un argument)
+struct struct_token* creer_token(char *str) {
 
-    memset(tok, 0, sizeof(struct token_s));
+    struct struct_token *tok = malloc(sizeof(struct struct_token));
     tok->taille = strlen(str);
-    
-    char *nstr = malloc(tok->taille+1);
-    
-    if(!nstr)
-    {
-        free(tok);
-        return NULL;
-    }
-    
-    strcpy(nstr, str);
-    tok->texte = nstr;
+    tok->texte = str;
     
     return tok;
 }
 
+// Ajoute un caractere a token_buffer
 void add_to_buf(char c) {
     token_buffer[token_bufferindex++] = c;
 
-    if(token_bufferindex >= token_buffersize)
-    {
-        char *tmp = realloc(token_buffer, token_buffersize*2);
-
-        if(!tmp)
-        {
-            errno = ENOMEM;
-            return;
-        }
+    if(token_bufferindex >= token_buffersize) {
+        char* tmp = realloc(token_buffer, token_buffersize*2);
 
         token_buffer = tmp;
         token_buffersize *= 2;
     }
 }
 
-
-struct token_s* tokenize(struct struct_commande *src) {
+// Retourne 
+struct struct_token* tokenize(struct struct_commande *src) {
     bool endloop = false;
 
     if(!src || !src->commande || !src->taille) {
         return &eof_token;
     }
     
-    if(!token_buffer)
-    {
+    if(!token_buffer) {
         token_buffersize = 1024;
         token_buffer = malloc(token_buffersize);
-        if(!token_buffer) {
-            return &eof_token;
-        }
     }
 
     token_bufferindex     = 0;
@@ -182,7 +158,7 @@ struct token_s* tokenize(struct struct_commande *src) {
             case '\t':
                 if(token_bufferindex > 0)
                 {
-                    endloop = 1;
+                    endloop = true;
                 }
                 break;
                 
@@ -221,20 +197,10 @@ struct token_s* tokenize(struct struct_commande *src) {
     }
     token_buffer[token_bufferindex] = '\0';
 
-    struct token_s *tok = creer_token(token_buffer);
+    struct struct_token *tok = creer_token(token_buffer);
 
     tok->src = src;
     return tok;
-}
-
-
-
-
-void free_token(struct token_s *tok) {
-    if(tok->texte) {
-        free(tok->texte);
-    }
-    free(tok);
 }
 
 
@@ -377,7 +343,7 @@ void free_node_tree(struct node_s *node)
     free(node);
 }
 
-struct node_s *parse_command(struct token_s *token){
+struct node_s *parse_command(struct struct_token *token){
     if(!token) return NULL; //Verifie qu'il y a bien un parametre
 
     struct node_s *cmd = new_node(NODE_COMMAND);
@@ -580,7 +546,7 @@ int parse_and_execute(struct struct_commande *src)
 {
     sauter_espaces(src);
 
-    struct token_s *tok = tokenize(src);
+    struct struct_token *tok = tokenize(src);
 
     if(tok == &eof_token)
     {
@@ -606,7 +572,6 @@ int parse_and_execute(struct struct_commande *src)
 
 
 
-
 int main(int argc, char **argv)
 {
     char cmd[1024];
@@ -620,11 +585,12 @@ int main(int argc, char **argv)
             continue;
         }
 
+
+
         if(strcmp(cmd, "exit\n") == 0) {
             break;
         }
 
-        printf("%s", cmd);
         struct struct_commande src;
         src.commande   = cmd;
         src.taille  = strlen(cmd);
