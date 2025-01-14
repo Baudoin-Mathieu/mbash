@@ -145,32 +145,20 @@ struct struct_token* tokenize(struct struct_commande *src) {
 
     char nc = lire_char(src);
 
-    if(nc == ERRCHAR || nc == EOF)
-    {
-        return &eof_token;
-    }
+    if(nc == EOF) return &eof_token;
 
-    do
-    {
-        switch(nc)
-        {
+    do {
+        switch(nc) {
             case ' ':
+
             case '\t':
-                if(token_bufferindex > 0)
-                {
-                    endloop = true;
-                }
+                if(token_bufferindex > 0) endloop = true;
                 break;
                 
             case '\n':
-                if(token_bufferindex > 0)
-                {
-                    reculer_cursor(src);
-                }
-                else
-                {
-                    add_to_buf(nc);
-                }
+                if(token_bufferindex > 0) reculer_cursor(src);
+                else add_to_buf(nc);
+
                 endloop = 1;
                 break;
                 
@@ -178,33 +166,22 @@ struct struct_token* tokenize(struct struct_commande *src) {
                 add_to_buf(nc);
                 break;
         }
-
-        if(endloop)
-        {
-            break;
-        }
+        if(endloop) break;
 
     } while((nc = lire_char(src)) != EOF);
 
-    if(token_bufferindex == 0)
-    {
-        return &eof_token;
-    }
-    
-    if(token_bufferindex >= token_buffersize)
-    {
-        token_bufferindex--;
-    }
+    // if(token_bufferindex == 0) return &eof_token;
+    // if(token_bufferindex >= token_buffersize) token_bufferindex--;
+
     token_buffer[token_bufferindex] = '\0';
-
     struct struct_token *tok = creer_token(token_buffer);
-
     tok->src = src;
+
     return tok;
 }
 
 
-
+// Partie sur le ABSTRACT SYNTAX TREE ------------------------------------------------------------------------------------------
 
 enum node_type_e
 {
@@ -236,114 +213,59 @@ union symval_u
     char              *str;
 };
 
-struct node_s
-{
+struct node_s {
     enum   node_type_e type;    /* type of this node */
     enum   val_type_e val_type; /* type of this node's val field */
     union  symval_u val;        /* value of this node */
-    int    children;            /* number of child nodes */
-    struct node_s *first_child; /* first child node */
-    struct node_s *next_sibling, *prev_sibling; /*
+    int    enfants;            /* number of child nodes */
+    struct node_s *premier_enfant; /* first child node */
+    struct node_s *next_frere, *prev_frere; /*
                                                  * if this is a child node, keep
-                                                 * pointers to prev/next siblings
+                                                 * pointers to prev/next freres
                                                  */
 };
 
-struct node_s *new_node(enum node_type_e type)
-{
+// Creer un nouveau node et le retourne
+struct node_s *new_node(enum node_type_e type) {
     struct node_s *node = malloc(sizeof(struct node_s));
-
-    if(!node)
-    {
-        return NULL;
-    }
-    
-    memset(node, 0, sizeof(struct node_s));
     node->type = type;
-    
     return node;
 }
 
+// Ajoute un noeuad enfant a un noeud parent
+void add_child_node(struct node_s *parent, struct node_s *enfant) {
 
-void add_child_node(struct node_s *parent, struct node_s *child)
-{
-    if(!parent || !child)
-    {
-        return;
+    if(!parent || !enfant) return;
+
+
+    if(!parent->premier_enfant) parent->premier_enfant = enfant;
+    else {
+        struct node_s *frere = parent->premier_enfant;
+    
+        while(frere->next_frere) frere = frere->next_frere;
+
+        frere->next_frere = enfant;
+        enfant->prev_frere = frere;
     }
 
-    if(!parent->first_child)
-    {
-        parent->first_child = child;
-    }
-    else
-    {
-        struct node_s *sibling = parent->first_child;
-    
-        while(sibling->next_sibling)
-        {
-            sibling = sibling->next_sibling;
-        }
-    
-        sibling->next_sibling = child;
-        child->prev_sibling = sibling;
-    }
-    parent->children++;
+    parent->enfants++;
 }
 
 
-void set_node_val_str(struct node_s *node, char *val)
-{
+// Setter
+void set_valeur_node(struct node_s *node, char *val) {
+
     node->val_type = VAL_STR;
-
-    if(!val)
-    {
-        node->val.str = NULL;
-    }
-    else
-    {
+    if(!val) node->val.str = NULL;
+    else {
         char *val2 = malloc(strlen(val)+1);
-    
-        if(!val2)
-        {
-            node->val.str = NULL;
-        }
-        else
-        {
-            strcpy(val2, val);
-            node->val.str = val2;
-        }
+        strcpy(val2, val);
+        node->val.str = val2;
     }
 }
 
-
-void free_node_tree(struct node_s *node)
-{
-    if(!node)
-    {
-        return;
-    }
-
-    struct node_s *child = node->first_child;
-    
-    while(child)
-    {
-        struct node_s *next = child->next_sibling;
-        free_node_tree(child);
-        child = next;
-    }
-    
-    if(node->val_type == VAL_STR)
-    {
-        if(node->val.str)
-        {
-            free(node->val.str);
-        }
-    }
-    free(node);
-}
-
-struct node_s *parse_command(struct struct_token *token){
+// Prend une commande et retourne un arbre AST
+struct node_s* parse_command(struct struct_token *token){
     if(!token) return NULL; //Verifie qu'il y a bien un parametre
 
     struct node_s *cmd = new_node(NODE_COMMAND);
@@ -357,15 +279,15 @@ struct node_s *parse_command(struct struct_token *token){
         struct node_s *word = new_node(NODE_VAR);
         if(!word) return NULL; //Verifie la presence d'une expression
 
-        set_node_val_str(word, token->texte);
+        set_valeur_node(word, token->texte);
         add_child_node(cmd, word);
 
     } while((token = tokenize(src)) != &eof_token);
     return cmd;
 }
 
-
-char *search_path(char *file)
+// Cherche la path d'un fichier    A NETTOYER
+char* search_path(char* file)
 {
     char *PATH = getenv("PATH");
     char *p    = PATH;
@@ -436,7 +358,7 @@ char *search_path(char *file)
     return NULL;
 }
 
-
+// execute une commande comme si entré dans un shell
 int do_exec_cmd(int argc, char **argv)
 {
     if(strchr(argv[0], '/'))
@@ -456,62 +378,36 @@ int do_exec_cmd(int argc, char **argv)
     return 0;
 }
 
+// Prend un noeud parent et l'execute
+int do_simple_command(struct node_s *node) {
 
-static inline void free_argv(int argc, char **argv)
-{
-    if(!argc)
-    {
-        return;
-    }
+    if(!node) return 0;
 
-    while(argc--)
-    {
-        free(argv[argc]);
-    }
-}
+    struct node_s *child = node->premier_enfant;
 
-
-int do_simple_command(struct node_s *node)
-{
-    if(!node)
-    {
-        return 0;
-    }
-
-    struct node_s *child = node->first_child;
-    if(!child)
-    {
-        return 0;
-    }
+    if(!child) return 0;
     
     int argc = 0;
     long max_args = 255;
     char *argv[max_args+1];     /* keep 1 for the terminating NULL arg */
     char *str;
     
-    while(child)
-    {
+    while(child) {
         str = child->val.str;
         argv[argc] = malloc(strlen(str)+1);
         
-    if(!argv[argc])
-        {
-            free_argv(argc, argv);
-            return 0;
-        }
+        if(!argv[argc]) return 0;
+
         
-    strcpy(argv[argc], str);
-        if(++argc >= max_args)
-        {
-            break;
-        }
-        child = child->next_sibling;
+        strcpy(argv[argc], str);
+        if(++argc >= max_args) break;
+
+        child = child->next_frere;
     }
     argv[argc] = NULL;
 
     pid_t child_pid = 0;
-    if((child_pid = fork()) == 0)
-    {
+    if((child_pid = fork()) == 0) {
         do_exec_cmd(argc, argv);
         fprintf(stderr, "error: failed to execute command: %s\n", strerror(errno));
         if(errno == ENOEXEC)
@@ -535,13 +431,12 @@ int do_simple_command(struct node_s *node)
 
     int status = 0;
     waitpid(child_pid, &status, 0);
-    free_argv(argc, argv);
     
     return 1;
 }
 
 
-
+// Prend une commande (struct_commande) et l'execute
 int parse_and_execute(struct struct_commande *src)
 {
     sauter_espaces(src);
@@ -563,14 +458,13 @@ int parse_and_execute(struct struct_commande *src)
         }
 
         do_simple_command(cmd);
-        free_node_tree(cmd);
         tok = tokenize(src);
     }
 
     return 1;
 }
 
-
+// MAIN ----------------------------------------------------------------------------------------------------------------------
 
 int main(int argc, char **argv)
 {
