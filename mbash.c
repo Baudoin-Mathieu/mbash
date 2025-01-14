@@ -9,6 +9,603 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <stdbool.h>
+
+
+
+
+
+// Structure representant 1 commande entré par l'utilisateur
+struct struct_commande {   
+    char *commande;         /* la commande en string */
+    int taille;               /* taille de la commande*/
+    int cursor_pos;         /* position d'un curseur */
+};
+
+// Fonctions sur struct_commande --------------------------------------------------------------------
+
+#define ERRCHAR         ( 0)
+#define EOF             (-1)
+
+// Recule le curseur de 1
+void reculer_cursor(struct struct_commande *src) {
+    if(src->cursor_pos < 0) {
+        return; }
+
+    src->cursor_pos--;
+}
+
+// Returne le char actuel et avance le curseur de 1
+char lire_char(struct struct_commande *src) {
+    if(!src || !src->commande) {
+        return ERRCHAR;
+    }
+
+    src->cursor_pos++ ;
+
+    if(src->cursor_pos >= src->taille) {
+        src->cursor_pos = src->taille;
+        return EOF;
+    }
+
+    return src->commande[src->cursor_pos];
+}
+
+// Retourne le char actuel
+char regarder_char(struct struct_commande *src) {
+    if(!src || !src->commande) {
+        return ERRCHAR;
+    }
+
+    int pos = src->cursor_pos;
+
+    pos++;
+
+    if(pos >= src->taille) {
+        return EOF;
+    }
+
+    return src->commande[pos];
+}
+
+
+void sauter_espaces(struct struct_commande *src) {
+    char c;
+
+    if(!src || !src->commande) {
+        return;
+    }
+
+    while( ((c = regarder_char(src)) != EOF) && (c == ' ' || c == '\t') ) {
+        lire_char(src);
+    }
+}
+
+// Fin fonctions sur struct_commande --------------------------------------------------------------------------------------------
+
+// Structure representant 1 token issu d'une commande (transformé en source au préalable)
+struct token_s {
+    struct struct_commande *src;       /* source */
+    int    taille;            /* longueur du string */
+    char   *texte;               /* string du token */
+};
+
+
+char *token_buffer = NULL;
+int   token_buffersize  = 0;
+int   token_bufferindex = -1;
+
+/* token End Of File */
+struct token_s eof_token =  {
+    .taille = 0,
+};
+
+// Créer un token a partir d'une commande
+struct token_s* creer_token(char *str) {
+
+    struct token_s *tok = malloc(sizeof(struct token_s));
+    
+    if(!tok) {
+        return NULL;
+    }
+
+    memset(tok, 0, sizeof(struct token_s));
+    tok->taille = strlen(str);
+    
+    char *nstr = malloc(tok->taille+1);
+    
+    if(!nstr)
+    {
+        free(tok);
+        return NULL;
+    }
+    
+    strcpy(nstr, str);
+    tok->texte = nstr;
+    
+    return tok;
+}
+
+void add_to_buf(char c) {
+    token_buffer[token_bufferindex++] = c;
+
+    if(token_bufferindex >= token_buffersize)
+    {
+        char *tmp = realloc(token_buffer, token_buffersize*2);
+
+        if(!tmp)
+        {
+            errno = ENOMEM;
+            return;
+        }
+
+        token_buffer = tmp;
+        token_buffersize *= 2;
+    }
+}
+
+
+struct token_s* tokenize(struct struct_commande *src) {
+    bool endloop = false;
+
+    if(!src || !src->commande || !src->taille) {
+        return &eof_token;
+    }
+    
+    if(!token_buffer)
+    {
+        token_buffersize = 1024;
+        token_buffer = malloc(token_buffersize);
+        if(!token_buffer) {
+            return &eof_token;
+        }
+    }
+
+    token_bufferindex     = 0;
+    token_buffer[0]       = '\0';
+
+    char nc = lire_char(src);
+
+    if(nc == ERRCHAR || nc == EOF)
+    {
+        return &eof_token;
+    }
+
+    do
+    {
+        switch(nc)
+        {
+            case ' ':
+            case '\t':
+                if(token_bufferindex > 0)
+                {
+                    endloop = 1;
+                }
+                break;
+                
+            case '\n':
+                if(token_bufferindex > 0)
+                {
+                    reculer_cursor(src);
+                }
+                else
+                {
+                    add_to_buf(nc);
+                }
+                endloop = 1;
+                break;
+                
+            default:
+                add_to_buf(nc);
+                break;
+        }
+
+        if(endloop)
+        {
+            break;
+        }
+
+    } while((nc = lire_char(src)) != EOF);
+
+    if(token_bufferindex == 0)
+    {
+        return &eof_token;
+    }
+    
+    if(token_bufferindex >= token_buffersize)
+    {
+        token_bufferindex--;
+    }
+    token_buffer[token_bufferindex] = '\0';
+
+    struct token_s *tok = creer_token(token_buffer);
+
+    tok->src = src;
+    return tok;
+}
+
+
+
+
+void free_token(struct token_s *tok) {
+    if(tok->texte) {
+        free(tok->texte);
+    }
+    free(tok);
+}
+
+
+
+
+enum node_type_e
+{
+    NODE_COMMAND,           /* simple command */
+    NODE_VAR,               /* variable name (or simply, a word) */
+};
+
+enum val_type_e
+{
+    VAL_SINT = 1,       /* signed int */
+    VAL_UINT,           /* unsigned int */
+    VAL_SLLONG,         /* signed long long */
+    VAL_ULLONG,         /* unsigned long long */
+    VAL_FLOAT,          /* floating point */
+    VAL_LDOUBLE,        /* long double */
+    VAL_CHR,            /* char */
+    VAL_STR,            /* str (char pointer) */
+};
+
+union symval_u
+{
+    long               sint;
+    unsigned long      uint;
+    long long          sllong;
+    unsigned long long ullong;
+    double             sfloat;
+    long double        ldouble;
+    char               chr;
+    char              *str;
+};
+
+struct node_s
+{
+    enum   node_type_e type;    /* type of this node */
+    enum   val_type_e val_type; /* type of this node's val field */
+    union  symval_u val;        /* value of this node */
+    int    children;            /* number of child nodes */
+    struct node_s *first_child; /* first child node */
+    struct node_s *next_sibling, *prev_sibling; /*
+                                                 * if this is a child node, keep
+                                                 * pointers to prev/next siblings
+                                                 */
+};
+
+struct node_s *new_node(enum node_type_e type)
+{
+    struct node_s *node = malloc(sizeof(struct node_s));
+
+    if(!node)
+    {
+        return NULL;
+    }
+    
+    memset(node, 0, sizeof(struct node_s));
+    node->type = type;
+    
+    return node;
+}
+
+
+void add_child_node(struct node_s *parent, struct node_s *child)
+{
+    if(!parent || !child)
+    {
+        return;
+    }
+
+    if(!parent->first_child)
+    {
+        parent->first_child = child;
+    }
+    else
+    {
+        struct node_s *sibling = parent->first_child;
+    
+        while(sibling->next_sibling)
+        {
+            sibling = sibling->next_sibling;
+        }
+    
+        sibling->next_sibling = child;
+        child->prev_sibling = sibling;
+    }
+    parent->children++;
+}
+
+
+void set_node_val_str(struct node_s *node, char *val)
+{
+    node->val_type = VAL_STR;
+
+    if(!val)
+    {
+        node->val.str = NULL;
+    }
+    else
+    {
+        char *val2 = malloc(strlen(val)+1);
+    
+        if(!val2)
+        {
+            node->val.str = NULL;
+        }
+        else
+        {
+            strcpy(val2, val);
+            node->val.str = val2;
+        }
+    }
+}
+
+
+void free_node_tree(struct node_s *node)
+{
+    if(!node)
+    {
+        return;
+    }
+
+    struct node_s *child = node->first_child;
+    
+    while(child)
+    {
+        struct node_s *next = child->next_sibling;
+        free_node_tree(child);
+        child = next;
+    }
+    
+    if(node->val_type == VAL_STR)
+    {
+        if(node->val.str)
+        {
+            free(node->val.str);
+        }
+    }
+    free(node);
+}
+
+struct node_s *parse_command(struct token_s *token){
+    if(!token) return NULL; //Verifie qu'il y a bien un parametre
+
+    struct node_s *cmd = new_node(NODE_COMMAND);
+    if(!cmd) return NULL; //Verifie qu'il y a bien un cmd
+
+    struct struct_commande *src = token->src; //Assure un meme flux de donnees
+
+    do{
+        if(token->texte[0] == '\n') break; //Aucune action si retour a la ligne
+
+        struct node_s *word = new_node(NODE_VAR);
+        if(!word) return NULL; //Verifie la presence d'une expression
+
+        set_node_val_str(word, token->texte);
+        add_child_node(cmd, word);
+
+    } while((token = tokenize(src)) != &eof_token);
+    return cmd;
+}
+
+
+char *search_path(char *file)
+{
+    char *PATH = getenv("PATH");
+    char *p    = PATH;
+    char *p2;
+    
+    while(p && *p)
+    {
+        p2 = p;
+
+        while(*p2 && *p2 != ':')
+        {
+            p2++;
+        }
+        
+    int  plen = p2-p;
+        if(!plen)
+        {
+            plen = 1;
+        }
+        
+        int  alen = strlen(file);
+        char path[plen+1+alen+1];
+        
+    strncpy(path, p, p2-p);
+        path[p2-p] = '\0';
+        
+    if(p2[-1] != '/')
+        {
+            strcat(path, "/");
+        }
+
+        strcat(path, file);
+        
+    struct stat st;
+        if(stat(path, &st) == 0)
+        {
+            if(!S_ISREG(st.st_mode))
+            {
+                errno = ENOENT;
+                p = p2;
+                if(*p2 == ':')
+                {
+                    p++;
+                }
+                continue;
+            }
+
+            p = malloc(strlen(path)+1);
+            if(!p)
+            {
+                return NULL;
+            }
+            
+        strcpy(p, path);
+            return p;
+        }
+        else    /* file not found */
+        {
+            p = p2;
+            if(*p2 == ':')
+            {
+                p++;
+            }
+        }
+    }
+
+    errno = ENOENT;
+    return NULL;
+}
+
+
+int do_exec_cmd(int argc, char **argv)
+{
+    if(strchr(argv[0], '/'))
+    {
+        execv(argv[0], argv);
+    }
+    else
+    {
+        char *path = search_path(argv[0]);
+        if(!path)
+        {
+            return 0;
+        }
+        execv(path, argv);
+        free(path);
+    }
+    return 0;
+}
+
+
+static inline void free_argv(int argc, char **argv)
+{
+    if(!argc)
+    {
+        return;
+    }
+
+    while(argc--)
+    {
+        free(argv[argc]);
+    }
+}
+
+
+int do_simple_command(struct node_s *node)
+{
+    if(!node)
+    {
+        return 0;
+    }
+
+    struct node_s *child = node->first_child;
+    if(!child)
+    {
+        return 0;
+    }
+    
+    int argc = 0;
+    long max_args = 255;
+    char *argv[max_args+1];     /* keep 1 for the terminating NULL arg */
+    char *str;
+    
+    while(child)
+    {
+        str = child->val.str;
+        argv[argc] = malloc(strlen(str)+1);
+        
+    if(!argv[argc])
+        {
+            free_argv(argc, argv);
+            return 0;
+        }
+        
+    strcpy(argv[argc], str);
+        if(++argc >= max_args)
+        {
+            break;
+        }
+        child = child->next_sibling;
+    }
+    argv[argc] = NULL;
+
+    pid_t child_pid = 0;
+    if((child_pid = fork()) == 0)
+    {
+        do_exec_cmd(argc, argv);
+        fprintf(stderr, "error: failed to execute command: %s\n", strerror(errno));
+        if(errno == ENOEXEC)
+        {
+            exit(126);
+        }
+        else if(errno == ENOENT)
+        {
+            exit(127);
+        }
+        else
+        {
+            exit(EXIT_FAILURE);
+        }
+    }
+    else if(child_pid < 0)
+    {
+        fprintf(stderr, "error: failed to fork command: %s\n", strerror(errno));
+        return 0;
+    }
+
+    int status = 0;
+    waitpid(child_pid, &status, 0);
+    free_argv(argc, argv);
+    
+    return 1;
+}
+
+
+
+int parse_and_execute(struct struct_commande *src)
+{
+    sauter_espaces(src);
+
+    struct token_s *tok = tokenize(src);
+
+    if(tok == &eof_token)
+    {
+        return 0;
+    }
+
+    while(tok && tok != &eof_token)
+    {
+        struct node_s *cmd = parse_command(tok);
+
+        if(!cmd)
+        {
+            break;
+        }
+
+        do_simple_command(cmd);
+        free_node_tree(cmd);
+        tok = tokenize(src);
+    }
+
+    return 1;
+}
+
+
+
 
 int main(int argc, char **argv)
 {
@@ -28,260 +625,12 @@ int main(int argc, char **argv)
         }
 
         printf("%s", cmd);
+        struct struct_commande src;
+        src.commande   = cmd;
+        src.taille  = strlen(cmd);
+        src.cursor_pos   = -1 ;
+        parse_and_execute(&src);
     };
 
     exit(EXIT_SUCCESS);
-}
-
-
-
-// Structure representant une commande entré par l'utilisateur
-struct struct_commande {   
-    char *commande;         /* la commande en string */
-    int size;               /* taille de la commande*/
-    int cursor_pos;         /* position d'un curseur */
-};
-
-// Fonctions sur struc_commande --------------------------------------------------------------------
-
-#define ERRCHAR         ( 0)
-#define EOF             (-1)
-
-// Recule le curseur de 1
-void reculer_cursor(struct source_commande *src) {
-    if(src->cursor_pos < 0) {
-        return; }
-
-    src->cursor_pos--;
-}
-
-// Returne le char actuel et avance le curseur de 1
-char lire_char(struct source_commande *src) {
-    if(!src || !src->commande) {
-        return ERRCHAR;
-    }
-
-    src->cursor_pos++ ;
-
-    if(src->cursor_pos >= src->size) {
-        src->cursor_pos = src->size;
-        return EOF;
-    }
-
-    return src->commande[src->cursor_pos];
-}
-
-// Retourne le char actuel
-char regarder_char(struct source_commande *src) {
-    if(!src || !src->commande) {
-        return ERRCHAR;
-    }
-
-    int pos = src->cursor_pos;
-
-    pos++;
-
-    if(pos >= src->size)
-    {
-        return EOF;
-    }
-
-    return src->commande[pos];
-}
-
-
-void sauter_espaces(struct source_commande *src) {
-    char c;
-
-    if(!src || !src->commande) {
-        return;
-    }
-
-    while( ((c = peek_char(src)) != EOF) && (c == ' ' || c == '\t') ) {
-        lire_char(src);
-    }
-}
-
-// Fin fonctions sur struct_commande --------------------------------------------------------------------------------------------
-
-// Structure representant 1 token issu d'une commande (transformé en source au préalable)
-struct token_s {
-    struct source_commande *src;       /* source */
-    int    text_len;            /* longueur du string */
-    char   *text;               /* string du token */
-};
-
-
-
-char *tok_buf = NULL;
-int   tok_bufsize  = 0;
-int   tok_bufindex = -1;
-
-/* special token to indicate end of input */
-struct token_s eof_token = 
-{
-    .text_len = 0,
-};
-
-
-void add_to_buf(char c) {
-    tok_buf[tok_bufindex++] = c;
-
-    if(tok_bufindex >= tok_bufsize)
-    {
-        char *tmp = realloc(tok_buf, tok_bufsize*2);
-
-        if(!tmp)
-        {
-            errno = ENOMEM;
-            return;
-        }
-
-        tok_buf = tmp;
-        tok_bufsize *= 2;
-    }
-}
-
-
-struct token_s *create_token(char *str) {
-    struct token_s *tok = malloc(sizeof(struct token_s));
-    
-    if(!tok)
-    {
-        return NULL;
-    }
-
-    memset(tok, 0, sizeof(struct token_s));
-    tok->text_len = strlen(str);
-    
-    char *nstr = malloc(tok->text_len+1);
-    
-    if(!nstr)
-    {
-        free(tok);
-        return NULL;
-    }
-    
-    strcpy(nstr, str);
-    tok->text = nstr;
-    
-    return tok;
-}
-
-
-void free_token(struct token_s *tok) {
-    if(tok->text) {
-        free(tok->text);
-    }
-    free(tok);
-}
-
-
-struct token_s *tokenize(struct source_commande *src) {
-    int  endloop = 0;
-
-    if(!src || !src->buffer || !src->bufsize)
-    {
-        errno = ENODATA;
-        return &eof_token;
-    }
-    
-    if(!tok_buf)
-    {
-        tok_bufsize = 1024;
-        tok_buf = malloc(tok_bufsize);
-        if(!tok_buf)
-        {
-            errno = ENOMEM;
-            return &eof_token;
-        }
-    }
-
-    tok_bufindex     = 0;
-    tok_buf[0]       = '\0';
-
-    char nc = next_char(src);
-
-    if(nc == ERRCHAR || nc == EOF)
-    {
-        return &eof_token;
-    }
-
-    do
-    {
-        switch(nc)
-        {
-            case ' ':
-            case '\t':
-                if(tok_bufindex > 0)
-                {
-                    endloop = 1;
-                }
-                break;
-                
-            case '\n':
-                if(tok_bufindex > 0)
-                {
-                    unget_char(src);
-                }
-                else
-                {
-                    add_to_buf(nc);
-                }
-                endloop = 1;
-                break;
-                
-            default:
-                add_to_buf(nc);
-                break;
-        }
-
-        if(endloop)
-        {
-            break;
-        }
-
-    } while((nc = next_char(src)) != EOF);
-
-    if(tok_bufindex == 0)
-    {
-        return &eof_token;
-    }
-    
-    if(tok_bufindex >= tok_bufsize)
-    {
-        tok_bufindex--;
-    }
-    tok_buf[tok_bufindex] = '\0';
-
-    struct token_s *tok = create_token(tok_buf);
-    if(!tok)
-    {
-        fprintf(stderr, "error: failed to alloc buffer: %s\n", strerror(errno));
-        return &eof_token;
-    }
-
-    tok->src = src;
-    return tok;
-}
-
-struct node_s *parse_command(struct token_s *token){
-    if(!token) return NULL; //Verifie qu'il y a bien un parametre
-
-    struct node_s *cmd = new_node(NODE_COMMAND);
-    if(!cmd) return NULL; //Verifie qu'il y a bien un cmd
-
-    struct source_s *src = token->src; //Assure un meme flux de donnees
-
-    do{
-        if(token->text[0] == '\n') break; //Aucune action si retour a la ligne
-
-        struct node_s *word = new_node(NODE_VAR);
-        if(!word) return NULL; //Verifie la presence d'une expression
-
-        set_node_val_str(word, token->text);
-        add_child_node(cmd, word);
-
-    } while((token = tokenize(src)) != &eof_token);
-    return cmd;
 }
