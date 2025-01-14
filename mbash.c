@@ -14,8 +14,6 @@
 #include <sys/wait.h>
 #include <stdbool.h>
 
-
-
 // Structure representant 1 commande entré par l'utilisateur
 struct struct_commande {   
     char *commande;         /* la commande en string */
@@ -116,7 +114,7 @@ struct struct_token* creer_token(char *str) {
 }
 
 // Ajoute un caractere a token_buffer
-void add_to_buf(char c) {
+void ajouter_token_buffer(char c) {
     token_buffer[token_bufferindex++] = c;
 
     if(token_bufferindex >= token_buffersize) {
@@ -157,13 +155,13 @@ struct struct_token* tokenize(struct struct_commande *src) {
                 
             case '\n':
                 if(token_bufferindex > 0) reculer_cursor(src);
-                else add_to_buf(nc);
+                else ajouter_token_buffer(nc);
                 
                 endloop = 1;
                 break;
                 
             default:
-                add_to_buf(nc);
+                ajouter_token_buffer(nc);
                 break;
         }
         if(endloop) break;
@@ -286,7 +284,7 @@ struct node_s* parse_command(struct struct_token *token){
     return cmd;
 }
 
-// Cherche la path d'un fichier    A NETTOYER 
+// Cherche la path d'un fichier    A NETTOYER A FAIRE PLUS TARD
 char* search_path(char* file)
 {
     char *PATH = getenv("PATH");
@@ -359,23 +357,10 @@ char* search_path(char* file)
 }
 
 // execute une commande comme si entré dans un shell
-int do_exec_cmd(int argc, char **argv)
-{
-    if(strchr(argv[0], '/'))
-    {
-        execv(argv[0], argv);
-    }
-    else
-    {
-        char *path = search_path(argv[0]);
-        if(!path)
-        {
-            return 0;
-        }
-        execv(path, argv);
-        free(path);
-    }
-    return 0;
+void do_exec_cmd(int argc, char **argv) {
+    char *path = search_path(argv[0]);
+    if(!path) return;
+    execv(path, argv);
 }
 
 // Prend un noeud parent et l'execute
@@ -437,31 +422,22 @@ int do_simple_command(struct node_s *node) {
 
 
 // Prend une commande (struct_commande) et l'execute
-int parse_and_execute(struct struct_commande *src)
+void parse_and_execute(struct struct_commande *src)
 {
     sauter_espaces(src);
 
     struct struct_token *tok = tokenize(src);
 
-    if(tok == &eof_token)
-    {
-        return 0;
-    }
+    if(tok == &eof_token) return ;
 
-    while(tok && tok != &eof_token)
-    {
+    while(tok && tok != &eof_token) {
         struct node_s *cmd = parse_command(tok);
 
-        if(!cmd)
-        {
-            break;
-        }
-
+        if(!cmd) break;
+        
         do_simple_command(cmd);
         tok = tokenize(src);
     }
-
-    return 1;
 }
 
 // MAIN ----------------------------------------------------------------------------------------------------------------------
@@ -484,8 +460,8 @@ int main(int argc, char **argv)
         }
 
         struct struct_commande src;
-        src.commande   = cmd;
-        src.taille  = strlen(cmd);
+        src.commande = cmd;
+        src.taille = strlen(cmd);
         src.cursor_pos   = -1 ;
         parse_and_execute(&src);
     };
