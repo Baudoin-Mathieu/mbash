@@ -155,8 +155,13 @@ struct struct_token* tokenize(struct struct_commande *src) {
                 
             case '\n':
                 if(token_bufferindex > 0) reculer_cursor(src);
+<<<<<<< HEAD
                 else ajouter_token_buffer(nc);
                 
+=======
+                else add_to_buf(nc);
+
+>>>>>>> 97ae295d3621e6d86ab62d976f3b07f22d47c7a9
                 endloop = 1;
                 break;
                 
@@ -168,7 +173,7 @@ struct struct_token* tokenize(struct struct_commande *src) {
 
     } while((nc = lire_char(src)) != EOF);
 
-    // if(token_bufferindex == 0) return &eof_token; 
+    // if(token_bufferindex == 0) return &eof_token;
     // if(token_bufferindex >= token_buffersize) token_bufferindex--;
 
     token_buffer[token_bufferindex] = '\0';
@@ -234,7 +239,7 @@ struct node_s *new_node(enum node_type_e type) {
 void add_child_node(struct node_s *parent, struct node_s *enfant) {
 
     if(!parent || !enfant) return;
-    
+
 
     if(!parent->premier_enfant) parent->premier_enfant = enfant;
     else {
@@ -252,7 +257,7 @@ void add_child_node(struct node_s *parent, struct node_s *enfant) {
 
 // Setter
 void set_valeur_node(struct node_s *node, char *val) {
-   
+
     node->val_type = VAL_STR;
     if(!val) node->val.str = NULL;
     else {
@@ -284,7 +289,11 @@ struct node_s* parse_command(struct struct_token *token){
     return cmd;
 }
 
+<<<<<<< HEAD
 // Cherche la path d'un fichier    A NETTOYER A FAIRE PLUS TARD
+=======
+// Cherche la path d'un fichier    A NETTOYER
+>>>>>>> 97ae295d3621e6d86ab62d976f3b07f22d47c7a9
 char* search_path(char* file)
 {
     char *PATH = getenv("PATH");
@@ -365,11 +374,11 @@ void do_exec_cmd(int argc, char **argv) {
 
 // Prend un noeud parent et l'execute
 int do_simple_command(struct node_s *node) {
-    
+
     if(!node) return 0;
 
     struct node_s *child = node->premier_enfant;
-    
+
     if(!child) return 0;
     
     int argc = 0;
@@ -382,11 +391,11 @@ int do_simple_command(struct node_s *node) {
         argv[argc] = malloc(strlen(str)+1);
         
         if(!argv[argc]) return 0;
-            
+
         
         strcpy(argv[argc], str);
         if(++argc >= max_args) break;
-        
+
         child = child->next_frere;
     }
     argv[argc] = NULL;
@@ -451,12 +460,14 @@ int main(int argc, char **argv)
 
         fgets(cmd, sizeof(cmd), stdin);
 
-        if(cmd[0] == '\0' || strcmp(cmd, "\n") == 0) {
-            continue;
-        }
+        if(cmd[0] == '\0' || strcmp(cmd, "\n") == 0) continue;
 
-        if(strcmp(cmd, "exit\n") == 0) {
-            break;
+        if(strcmp(cmd, "exit\n") == 0) break;
+
+        if(strncmp(cmd, "cd ", 3) == 0){
+            cmd[strlen(cmd)-1] = '\0';
+            if(chdir(cmd+3) != 0) perror("cd");
+            continue;
         }
 
         struct struct_commande src;
