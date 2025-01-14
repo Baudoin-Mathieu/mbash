@@ -1,105 +1,34 @@
+// SAE S3 Système mbash IUT CHARLEMAGNE 2025
+// BAUDOIN Mathieu
+// EYER Nathan
+
+// Pour compiler : gcc mbash.c -o mbash
+// Pour executer : ./mbash
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
 
-void print_prompt1(void)
-{
-    fprintf(stderr, "$ ");
-}
-
-void print_prompt2(void)
-{
-    fprintf(stderr, "> ");
-}
-
-char *read_cmd(void)
-{
-    char buf[1024];
-    char *ptr = NULL;
-    char ptrlen = 0;
-
-    while(fgets(buf, 1024, stdin))
-    {
-        int buflen = strlen(buf);
-
-        if(!ptr)
-        {
-            ptr = malloc(buflen+1);
-        }
-        else
-        {
-            char *ptr2 = realloc(ptr, ptrlen+buflen+1);
-
-            if(ptr2)
-            {
-                ptr = ptr2;
-            }
-            else
-            {
-                free(ptr);
-                ptr = NULL;
-            }
-        }
-
-        if(!ptr)
-        {
-            fprintf(stderr, "error: failed to alloc buffer: %s\n", strerror(errno));
-            return NULL;
-        }
-
-        strcpy(ptr+ptrlen, buf);
-
-        if(buf[buflen-1] == '\n')
-        {
-            if(buflen == 1 || buf[buflen-2] != '\\')
-            {
-                return ptr;
-            }
-
-            ptr[ptrlen+buflen-2] = '\0';
-            buflen -= 2;
-            print_prompt2();
-        }
-
-        ptrlen += buflen;
-    }
-
-    return ptr;
-}
-
 int main(int argc, char **argv)
 {
-    char *cmd;
+    char cmd[1024];
 
-    do
-    {
-        print_prompt1();
+    while(1) {
+        fprintf(stderr, "$ ");
 
-        cmd = read_cmd();
+        fgets(cmd, sizeof(cmd), stdin);
 
-        if(!cmd)
-        {
-            exit(EXIT_SUCCESS);
-        }
-
-        if(cmd[0] == '\0' || strcmp(cmd, "\n") == 0)
-        {
-            free(cmd);
+        if(cmd[0] == '\0' || strcmp(cmd, "\n") == 0) {
             continue;
         }
 
-        if(strcmp(cmd, "exit\n") == 0)
-        {
-            free(cmd);
+        if(strcmp(cmd, "exit\n") == 0) {
             break;
         }
 
-        printf("%s\n", cmd);
-
-        free(cmd);
-
-    } while(1);
+        printf("%s", cmd);
+    };
 
     exit(EXIT_SUCCESS);
 }
