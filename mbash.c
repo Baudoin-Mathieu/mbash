@@ -32,3 +32,24 @@ int main(int argc, char **argv)
 
     exit(EXIT_SUCCESS);
 }
+
+struct node_s *parse_command(struct token_s *token){
+    if(!token) return NULL; //Verifie qu'il y a bien un parametre
+
+    struct node_s *cmd = new_node(NODE_COMMAND);
+    if(!cmd) return NULL; //Verifie qu'il y a bien un cmd
+
+    struct source_s *src = token->src; //Assure un meme flux de donnees
+
+    do{
+        if(token->text[0] == '\n') break; //Aucune action si retour a la ligne
+
+        struct node_s *word = new_node(NODE_VAR);
+        if(!word) return NULL; //Verifie la presence d'une expression
+
+        set_node_val_str(word, token->text);
+        add_child_node(cmd, word);
+
+    } while((token = tokenize(src)) != &eof_token);
+    return cmd;
+}
