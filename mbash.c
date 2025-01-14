@@ -581,14 +581,14 @@ int main(int argc, char **argv)
 
         fgets(cmd, sizeof(cmd), stdin);
 
-        if(cmd[0] == '\0' || strcmp(cmd, "\n") == 0) {
+        if(cmd[0] == '\0' || strcmp(cmd, "\n") == 0) continue;
+
+        if(strcmp(cmd, "exit\n") == 0) break;
+
+        if(strncmp(cmd, "cd ", 3) == 0){
+            cmd[strlen(cmd)-1] = '\0';
+            if(chdir(cmd+3) != 0) perror("cd");
             continue;
-        }
-
-
-
-        if(strcmp(cmd, "exit\n") == 0) {
-            break;
         }
 
         struct struct_commande src;
