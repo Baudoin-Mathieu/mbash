@@ -155,13 +155,9 @@ struct struct_token* tokenize(struct struct_commande *src) {
                 
             case '\n':
                 if(token_bufferindex > 0) reculer_cursor(src);
-<<<<<<< HEAD
-                else ajouter_token_buffer(nc);
-                
-=======
-                else add_to_buf(nc);
 
->>>>>>> 97ae295d3621e6d86ab62d976f3b07f22d47c7a9
+                else ajouter_token_buffer(nc);
+
                 endloop = 1;
                 break;
                 
@@ -289,11 +285,8 @@ struct node_s* parse_command(struct struct_token *token){
     return cmd;
 }
 
-<<<<<<< HEAD
+
 // Cherche la path d'un fichier    A NETTOYER A FAIRE PLUS TARD
-=======
-// Cherche la path d'un fichier    A NETTOYER
->>>>>>> 97ae295d3621e6d86ab62d976f3b07f22d47c7a9
 char* search_path(char* file)
 {
     char *PATH = getenv("PATH");
