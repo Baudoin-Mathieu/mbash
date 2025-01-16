@@ -370,7 +370,7 @@ int parse_and_execute(struct commande *src){
 
 
 //HISTORIQUE (fleches) ---------------------------------------------------------------------------------------------------------------------
-#include <termios.h
+#include <termios.h>
 #define MAX_HISTORIQUE 100 //Taille max de l'historique
 
 //Structure pour l'historique
