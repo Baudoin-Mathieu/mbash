@@ -83,7 +83,7 @@ int   token_bufferindex = -1;
 /* token End Of File */
 struct token fin_token =  {.taille = 0,};
 
-// Créer un token a partir d'un mot (une fonction ou un argument)
+// Creer un token a partir d'un mot (une fonction ou un argument)
 struct token* creer_token(char *str) {
     struct token *tok = malloc(sizeof(struct token));
     tok->taille = strlen(str);
@@ -157,10 +157,10 @@ enum node_type_e{
 };
 
 enum val_type_e{
-    VAL_SINT = 1,       /* int signé */
-    VAL_UINT,           /* int non signé */
-    VAL_SLLONG,         /* long long signé */
-    VAL_ULLONG,         /* long long non signé */
+    VAL_SINT = 1,       /* int signe */
+    VAL_UINT,           /* int non signe */
+    VAL_SLLONG,         /* long long signe */
+    VAL_ULLONG,         /* long long non signe */
     VAL_FLOAT,          /* floating point */
     VAL_LDOUBLE,        /* long double */
     VAL_CHR,            /* char */
@@ -293,7 +293,7 @@ char* search_path(char* file){
     return NULL;
 }
 
-// execute une commande comme si entré dans un shell
+// execute une commande comme si entre dans un shell
 int do_exec_cmd(int argc, char **argv){
     if(strchr(argv[0], '/')) execv(argv[0], argv);
     else{
@@ -368,6 +368,96 @@ int parse_and_execute(struct commande *src){
     return 1;
 }
 
+
+//HISTORIQUE (fleches) ---------------------------------------------------------------------------------------------------------------------
+#include <termios.h
+#define MAX_HISTORIQUE 100 //Taille max de l'historique
+
+//Structure pour l'historique
+char *historique[MAX_HISTORIQUE];
+int nb_historique = 0;
+int index_historique = -1;
+
+//Ajoute une commande à l'historique
+void ajouter_historique(const char *cmd) {
+    if (nb_historique == MAX_HISTORIQUE) {
+        free(historique[0]); //Supprime le plus vieux
+        memmove(historique, historique + 1, (MAX_HISTORIQUE - 1) * sizeof(char *));
+        nb_historique--;
+    }
+    historique[nb_historique++] = strdup(cmd);
+}
+
+//Permet de detecter la pression des touches
+void detecter_touche(struct termios *termios) {
+    struct termios raw = *termios;
+    raw.c_lflag &= ~(ECHO | ICANON);
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+}
+
+//Restaure le terminal
+void pasdetecter_touche(struct termios *termios) {
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, termios);
+}
+
+//Permet la gestion des fleches haut et bas
+bool lire(char *cmd, size_t size) {
+    struct termios termios;
+    tcgetattr(STDIN_FILENO, &termios);
+    detecter_touche(&termios);
+
+    size_t pos = 0;
+    int c;
+
+    while (true) {
+        c = getchar();
+        if (c == '\n') { //Touche Entree
+            cmd[pos] = '\0';
+            printf("\n");
+            break;
+        } else if (c == 127) { //Touche effacer
+            if (pos > 0) {
+                pos--;
+                printf("\b \b"); //Supprime le dernier caractere affiche
+            }
+        } else if (c == '\033') { //Fleches
+            getchar();           //Ignore les '['
+            switch (getchar()) { //Fleche directionnelle
+                case 'A': //Fleche haut
+                    if (nb_historique > 0 && index_historique > 0) {
+                        index_historique--;
+                        pos = snprintf(cmd, size, "%s", historique[index_historique]);
+                        printf("\r\33[2K$ %s", cmd); //Reecrit la ligne
+                        fflush(stdout);
+                    }
+                    break;
+                case 'B': //Fleche bas
+                    if (nb_historique > 0 && index_historique < nb_historique - 1) {
+                        index_historique++;
+                        pos = snprintf(cmd, size, "%s", historique[index_historique]);
+                        printf("\r\33[2K$ %s", cmd); //Reecrit la ligne
+                        fflush(stdout);
+                    } else if (index_historique == nb_historique - 1) {
+                        index_historique = nb_historique;
+                        pos = 0;
+                        cmd[0] = '\0';
+                        printf("\r\33[2K$ "); //Vide la ligne
+                        fflush(stdout);
+                    }
+                    break;
+            }
+        } else if (pos < size - 1) { //Autres caracteres
+            cmd[pos++] = c;
+            printf("%c", c);
+        }
+    }
+    pasdetecter_touche(&termios); //Retour a l'etat de base
+    return pos > 0;
+}
+
+
+
+
 // MAIN ----------------------------------------------------------------------------------------------------------------------
 
 int main(int argc, char **argv){
@@ -375,24 +465,27 @@ int main(int argc, char **argv){
 
     while(1) {
         fprintf(stderr, "$ ");
+        index_historique = nb_historique;
 
-        fgets(cmd, sizeof(cmd), stdin);
+        if (!lire(cmd, sizeof(cmd))) continue;
 
-        if(cmd[0] == '\0' || strcmp(cmd, "\n") == 0) continue;
-
-        if(strcmp(cmd, "exit\n") == 0) break;
+        if(strcmp(cmd, "exit") == 0) break;
 
         if(strncmp(cmd, "cd ", 3) == 0){
-            cmd[strlen(cmd)-1] = '\0';
-            if(chdir(cmd+3) != 0) perror("cd");
+            if(chdir(cmd + 3) != 0) perror("cd");
+            ajouter_historique(cmd);
             continue;
         }
 
+        ajouter_historique(cmd);
+
         struct commande src;
-        src.commande   = cmd;
-        src.taille  = strlen(cmd);
-        src.curseur   = -1 ;
+        src.commande = cmd;
+        src.taille = strlen(cmd);
+        src.curseur = -1;
         parse_and_execute(&src);
     };
+
+    for (int i = 0; i < nb_historique; i++) free(historique[i]);
     exit(EXIT_SUCCESS);
 }
