@@ -471,6 +471,14 @@ int main(int argc, char **argv){
 
         if(strcmp(cmd, "exit") == 0) break;
 
+        if(strcmp(cmd, "history") == 0){
+            for(int i=0;i<nb_historique;i++){
+                printf("%d: %s\n", i+1, historique[i]);
+            }
+            ajouter_historique(cmd);
+            continue;
+        }
+
         if(strncmp(cmd, "cd ", 3) == 0){
             if(chdir(cmd + 3) != 0) perror("cd");
             ajouter_historique(cmd);
