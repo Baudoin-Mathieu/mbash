@@ -97,6 +97,10 @@ void add_to_buf(char c) {
 
     if(token_bufferindex >= token_buffersize) {
         char* tmp = realloc(token_buffer, token_buffersize*2);
+        if (!tmp) {
+            perror("Erreur de réallocation de mémoire");
+            exit(EXIT_FAILURE); // ou une autre action de gestion d'erreur
+        }
         token_buffer = tmp;
         token_buffersize *= 2;
     }
@@ -386,6 +390,11 @@ void ajouter_historique(const char *cmd) {
         nb_historique--;
     }
     historique[nb_historique++] = strdup(cmd);
+    if (!historique[nb_historique - 1]) {
+        perror("Erreur d'allocation mémoire");
+        exit(EXIT_FAILURE);
+    }
+
 }
 
 //Permet de detecter la pression des touches
@@ -401,6 +410,7 @@ void pasdetecter_touche(struct termios *termios) {
 }
 
 #include <dirent.h>
+#include <ctype.h>
 int afficher_proposition(char **cmd){
     DIR *dir;
     struct dirent *entry;
@@ -413,12 +423,11 @@ int afficher_proposition(char **cmd){
 
     printf("\n");
     while((entry = readdir(dir)) != NULL){
-        printf("%s ",entry->d_name);
+        if (entry->d_name[0] != '.' && isprint(entry->d_name[0])) {
+            printf("%s ", entry->d_name);
+        }
     }
-    printf("\n$");
-
     closedir(dir);
-    cmd = NULL;
     return 0;
 }
 
@@ -470,8 +479,6 @@ bool lire(char *cmd, size_t size) {
             }
         }else if(c == '\t'){
             afficher_proposition(&cmd);
-            printf("\r$ %s", cmd);
-            fflush(stdout);
         }else if (pos < size - 1) { //Autres caracteres
             cmd[pos++] = c;
             printf("%c", c);
