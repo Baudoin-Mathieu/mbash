@@ -400,6 +400,28 @@ void pasdetecter_touche(struct termios *termios) {
     tcsetattr(STDIN_FILENO, TCSAFLUSH, termios);
 }
 
+#include <dirent.h>
+int afficher_proposition(char **cmd){
+    DIR *dir;
+    struct dirent *entry;
+
+    dir = opendir(".");
+    if(dir == NULL){
+        perror("Impossible d'ouvrir le répertoire");
+        return 1;
+    }
+
+    printf("\n");
+    while((entry = readdir(dir)) != NULL){
+        printf("%s ",entry->d_name);
+    }
+    printf("\n$");
+
+    closedir(dir);
+    cmd = NULL;
+    return 0;
+}
+
 //Permet la gestion des fleches haut et bas
 bool lire(char *cmd, size_t size) {
     struct termios termios;
@@ -446,7 +468,11 @@ bool lire(char *cmd, size_t size) {
                     }
                     break;
             }
-        } else if (pos < size - 1) { //Autres caracteres
+        }else if(c == '\t'){
+            afficher_proposition(&cmd);
+            printf("\r$ %s", cmd);
+            fflush(stdout);
+        }else if (pos < size - 1) { //Autres caracteres
             cmd[pos++] = c;
             printf("%c", c);
         }
@@ -454,7 +480,6 @@ bool lire(char *cmd, size_t size) {
     pasdetecter_touche(&termios); //Retour a l'etat de base
     return pos > 0;
 }
-
 
 
 
