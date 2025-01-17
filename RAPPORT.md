@@ -9,6 +9,10 @@ Cette SAE consiste à créer un interpréteur de commandes simplifié en C, appe
 
 L'objectif de ce projet est de développer un interpréteur de commandes en C qui simule un shell. Ce programme doit pouvoir exécuter des commandes simples et gérer des fonctionnalités de base comme la gestion de l'historique, et le déplacement dans l'arborescence de fichiers.
 
+<img src="mbash.png" alt="drawing" width="500"/>
+
+[//]: # (![Diagramme]&#40;mbash.png "Diagramme"&#41;)
+
 ## Développement du projet
 
 ### 1. Structure du programme

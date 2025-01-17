@@ -146,7 +146,7 @@ void execute_command(struct parsed_command* parsed_cmd) {
     int pid = fork();
 
     if (pid == 0) {
-        execv(path, parsed_cmd->args);
+        execve(path, parsed_cmd->args, NULL);
         perror("Erreur execv"); // En cas d'échec
         exit(EXIT_FAILURE);
     } else if (pid > 0) {
