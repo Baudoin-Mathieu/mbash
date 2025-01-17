@@ -389,6 +389,16 @@ int main(int argc, char** argv){
             continue;
         }
 
+        if (strcmp(user_input, "!!") == 0) {
+            if (nb_historique > 0) {
+                strcpy(user_input, historique[nb_historique - 1]);
+                printf("$ %s\n", user_input);
+                parse_and_execute(user_input);
+            } else {
+                printf("Aucune commande précédente.\n");
+            }
+            continue;
+        }
 
         if(strcmp(user_input, "history") == 0){
             for(int i=0;i<nb_historique;i++){
