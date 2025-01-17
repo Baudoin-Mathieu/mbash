@@ -120,58 +120,47 @@ char* search_path(const char* commandname) {
 
 
     char* path_env = getenv("PATH");
-    char* dir_start = path_env;  // Pointer to the start of the current directory in PATH
-    char* dir_end;  // Pointer to the end of the current directory in PATH
+    char* dir_start = path_env;  // Pointeur debut du directory
+    char* dir_end;  // Pointeur fin du directory
 
     while (dir_start && *dir_start) {
         dir_end = dir_start;
 
-        // Find the next colon ':' or end of string
+        // on avance le pointeur de fin jusqu'a trouver : donc un path
         while (*dir_end && *dir_end != ':') {
             dir_end++;
         }
 
-        int dir_length = dir_end - dir_start;  // Length of the current directory path
-        if (dir_length == 0) dir_length = 1;  // Ensure the directory length is at least 1
+        int dir_length = dir_end - dir_start;  // taille du directory que l'on inspecte
 
-        int filename_length = strlen(commandname);  // Length of the filename
+        int filename_length = strlen(commandname);  // ex ls -> 2  ,  man -> 3
 
-        char full_path[dir_length + 1 + filename_length + 1];  // Allocate space for full path
+        char full_path[dir_length + 1 + filename_length + 1];  // allouer l'espace avec +1 pour les /
 
         // Copy the directory part
         strncpy(full_path, dir_start, dir_length);
         full_path[dir_length] = '\0';
 
-        // Ensure the path ends with a '/'
+        // le path doit tjrs terminer par /
         if (full_path[dir_length - 1] != '/') {
             strcat(full_path, "/");
         }
 
-        // Append the filename
+        // On ajoute le nom de commande au directory que l'on inspecte
         strcat(full_path, commandname);
 
-        // Check if the file exists and is a regular file
+        // Si le fichier existe
         struct stat file_stat;
         if (stat(full_path, &file_stat) == 0) {
-            if (!S_ISREG(file_stat.st_mode)) {
-                errno = ENOENT;
-                dir_start = dir_end;
-                if (*dir_end == ':') dir_start++;  // Skip the colon to move to the next directory
-                continue;
-            }
 
-            // Allocate memory for the full path result and return it
-            char* result_path = malloc(strlen(full_path) + 1);
-            if (!result_path) {
-                return NULL;  // Memory allocation failure
-            }
-
+            char* result_path = malloc(strlen(full_path));
             strcpy(result_path, full_path);
             return result_path;
+
         } else {
-            // File not found, move to the next directory in PATH
+            // Fichier pas de ce directory du PATH , on skip au prochain directory
             dir_start = dir_end;
-            if (*dir_end == ':') dir_start++;  // Skip the colon to move to the next directory
+            if (*dir_end == ':') dir_start++;  // skip le :
         }
     }
     return NULL;  // Fichier introuvable dans le PATH
@@ -202,6 +191,8 @@ void execute_command(struct parsed_command* parsed_cmd) {
     } else {
         perror("Erreur fork");
     }
+
+    free(path) ;
 }
 
 
