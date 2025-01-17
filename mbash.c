@@ -136,29 +136,27 @@ char* search_path(const char* commandname) {
         }
 
         int dir_length = dir_end - dir_start;  // Length of the current directory path
-        if (dir_length == 0) dir_length = 1;  // Ensure the directory length is at least 1
 
-        int filename_length = strlen(commandname);  // Length of the filename
+        int filename_length = strlen(commandname);  // ex ls -> 2  ,  man -> 3
 
-        char full_path[dir_length + 1 + filename_length + 1];  // Allocate space for full path
+        char full_path[dir_length + 1 + filename_length + 1];  // allouer l'espace avec +1 pour les /
 
         // Copy the directory part
         strncpy(full_path, dir_start, dir_length);
         full_path[dir_length] = '\0';
 
-        // Ensure the path ends with a '/'
+        // le path doit tjrs terminer par /
         if (full_path[dir_length - 1] != '/') {
             strcat(full_path, "/");
         }
 
-        // Append the filename
+        // On ajoute le nom de commande au directory que l'on inspecte
         strcat(full_path, commandname);
 
         // Check if the file exists and is a regular file
         struct stat file_stat;
         if (stat(full_path, &file_stat) == 0) {
             if (!S_ISREG(file_stat.st_mode)) {
-                errno = ENOENT;
                 dir_start = dir_end;
                 if (*dir_end == ':') dir_start++;  // Skip the colon to move to the next directory
                 continue;
@@ -172,10 +170,11 @@ char* search_path(const char* commandname) {
 
             strcpy(result_path, full_path);
             return result_path;
+
         } else {
-            // File not found, move to the next directory in PATH
+            // Fichier pas de ce directory du PATH , on skip au prochain directory
             dir_start = dir_end;
-            if (*dir_end == ':') dir_start++;  // Skip the colon to move to the next directory
+            if (*dir_end == ':') dir_start++;  // skip le :
         }
     }
     return NULL;  // Fichier introuvable dans le PATH
