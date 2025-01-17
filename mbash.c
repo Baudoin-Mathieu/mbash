@@ -111,10 +111,6 @@ struct parsed_command* parse_command(struct command* cmd){
 
     parsed_cmd->args[parsed_cmd->nbr_arg] = NULL ; // NULL terminator pour le execv
 
-    printf("func %s\n",parsed_cmd->func);
-    printf("arg 1%s\n",parsed_cmd->args[0]);
-    printf("arg 2%s\n",parsed_cmd->args[1]);
-
     return parsed_cmd;
 }
 
@@ -195,9 +191,16 @@ void execute_command(struct parsed_command* parsed_cmd) {
 
     int pid = fork();
 
-    if(pid == 0) {
+    if (pid == 0) {
         execv(path, parsed_cmd->args);
-        exit(1);
+        perror("Erreur execv"); // En cas d'échec
+        exit(EXIT_FAILURE);
+    } else if (pid > 0) {
+        // Attendre la fin du processus enfant
+        int status;
+        waitpid(pid, &status, 0);
+    } else {
+        perror("Erreur fork");
     }
 }
 
@@ -267,7 +270,6 @@ int afficher_proposition(char **cmd){
         return 1;
     }
 
-    printf("\n");
     while((entry = readdir(dir)) != NULL){
         if (entry->d_name[0] != '.' && isprint(entry->d_name[0])) {
             printf("%s ", entry->d_name);
@@ -331,7 +333,6 @@ bool lire(char *cmd, size_t size) {
     }
 
     pasdetecter_touche(&termios); //Retour a l'etat de base
-    printf("pos :%i\n", pos);
     return pos > 0;
 }
 
@@ -347,23 +348,33 @@ int main(int argc, char** argv){
 
     while(true) {
         printf("$ ");
+        fflush(stdout);
         index_historique = nb_historique;
 
-        //fgets(user_input, 1024, stdin) ;
-
-        if (!lire(user_input, sizeof(user_input))) continue;
-
-        printf("%s\n",user_input);
+        if (!lire(user_input, sizeof(user_input))) {
+                printf("\n");  // Retour à la ligne propre si la commande est vide
+                continue;
+        }
 
         if(user_input[0] == '\0' || strcmp(user_input, "\n") == 0) continue;
 
         if(strcmp(user_input, "exit") == 0) break;
 
-        if(strncmp(user_input, "cd ", 3) == 0){
-            user_input[strlen(user_input)-1] = '\0';
-            if(chdir(user_input+3) != 0) perror("cd");
+        if (strncmp(user_input, "cd ", 3) == 0) {
+            // Supprimer le caractère de fin de ligne '\n' s'il est présent
+            size_t len = strlen(user_input);
+            if (user_input[len - 1] == '\n') {
+                user_input[len - 1] = '\0';
+            }
+
+            // Extraire le chemin et essayer de changer de répertoire
+            const char *path = user_input + 3; // Ignorer "cd "
+            if (chdir(path) != 0) {
+                perror("cd"); // Affiche l'erreur si chdir échoue
+            }
             continue;
         }
+
 
         if(strcmp(user_input, "history") == 0){
             for(int i=0;i<nb_historique;i++){
