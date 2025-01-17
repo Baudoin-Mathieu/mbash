@@ -72,8 +72,6 @@ struct parsed_command* parse_command(struct command* cmd){
     while(regarder_char(cmd)!=EOF){
         c = lire_char(cmd);
 
-        
-
         switch(c){
 
             case ' '  :
@@ -96,6 +94,7 @@ struct parsed_command* parse_command(struct command* cmd){
                 buffer[buffer_index] = c;
                 buffer[buffer_index+1] = '\0';
         }
+
     }
 
     if(!parsed_cmd->func){
@@ -111,7 +110,6 @@ struct parsed_command* parse_command(struct command* cmd){
     free(buffer);
 
     parsed_cmd->args[parsed_cmd->nbr_arg] = NULL ; // NULL terminator pour le execv
-
 
     return parsed_cmd;
 }
@@ -176,8 +174,8 @@ char* search_path(const char* commandname) {
             if (*dir_end == ':') dir_start++;  // Skip the colon to move to the next directory
         }
     }
-
     return NULL;  // Fichier introuvable dans le PATH
+
 }
 
 
@@ -216,6 +214,124 @@ void parse_and_execute(char* input){
 
 }
 
+
+//HISTORIQUE (fleches) ---------------------------------------------------------------------------------------------------------------------
+#include <termios.h>
+#define MAX_HISTORIQUE 100 //Taille max de l'historique
+
+//Structure pour l'historique
+char *historique[MAX_HISTORIQUE];
+int nb_historique = 0;
+int index_historique = -1;
+
+//Ajoute une commande à l'historique
+void ajouter_historique(const char *cmd) {
+    if (nb_historique == MAX_HISTORIQUE) {
+        free(historique[0]); //Supprime le plus vieux
+        memmove(historique, historique + 1, (MAX_HISTORIQUE - 1) * sizeof(char *));
+        nb_historique--;
+    }
+    historique[nb_historique++] = strdup(cmd);
+    if (!historique[nb_historique - 1]) {
+        perror("Erreur d'allocation mémoire");
+        exit(EXIT_FAILURE);
+    }
+
+}
+
+//Permet de detecter la pression des touches
+void detecter_touche(struct termios *termios) {
+    struct termios raw = *termios;
+    raw.c_lflag &= ~(ECHO | ICANON);
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+}
+
+//Restaure le terminal
+void pasdetecter_touche(struct termios *termios) {
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, termios);
+}
+
+#include <dirent.h>
+#include <ctype.h>
+int afficher_proposition(char **cmd){
+    DIR *dir;
+    struct dirent *entry;
+
+    dir = opendir(".");
+    if(dir == NULL){
+        perror("Impossible d'ouvrir le répertoire");
+        return 1;
+    }
+
+    printf("\n");
+    while((entry = readdir(dir)) != NULL){
+        if (entry->d_name[0] != '.' && isprint(entry->d_name[0])) {
+            printf("%s ", entry->d_name);
+        }
+    }
+    closedir(dir);
+    return 0;
+}
+
+//Permet la gestion des fleches haut et bas
+bool lire(char *cmd, size_t size) {
+    struct termios termios;
+    tcgetattr(STDIN_FILENO, &termios);
+    detecter_touche(&termios);
+
+    size_t pos = 0;
+    int c;
+
+    while (true) {
+        c = getchar();
+        if (c == '\n') { //Touche Entree
+            cmd[pos] = '\0';
+            printf("\n");
+            break;
+        } else if (c == 127) { //Touche effacer
+            if (pos > 0) {
+                pos--;
+                printf("\b \b"); //Supprime le dernier caractere affiche
+            }
+        } else if (c == '\033') { //Fleches
+            getchar();           //Ignore les '['
+            switch (getchar()) { //Fleche directionnelle
+                case 'A': //Fleche haut
+                    if (nb_historique > 0 && index_historique > 0) {
+                        index_historique--;
+                        pos = snprintf(cmd, size, "%s", historique[index_historique]);
+                        printf("\r\33[2K$ %s", cmd); //Reecrit la ligne
+                        fflush(stdout);
+                    }
+                    break;
+                case 'B': //Fleche bas
+                    if (nb_historique > 0 && index_historique < nb_historique - 1) {
+                        index_historique++;
+                        pos = snprintf(cmd, size, "%s", historique[index_historique]);
+                        printf("\r\33[2K$ %s", cmd); //Reecrit la ligne
+                        fflush(stdout);
+                    } else if (index_historique == nb_historique - 1) {
+                        index_historique = nb_historique;
+                        pos = 0;
+                        cmd[0] = '\0';
+                        printf("\r\33[2K$ "); //Vide la ligne
+                        fflush(stdout);
+                    }
+                    break;
+            }
+        }else if(c == '\t'){
+            afficher_proposition(&cmd);
+        }else if (pos < size - 1) { //Autres caracteres
+            cmd[pos++] = c;
+            printf("%c", c);
+        }
+    }
+    pasdetecter_touche(&termios); //Retour a l'etat de base
+    return pos > 0;
+}
+
+
+
 // MAIN ----------------------------------------------------------------------------------------------------------------------
 
 int main(int argc, char** argv){
@@ -226,8 +342,13 @@ int main(int argc, char** argv){
 
     while(true) {
         fprintf(stderr, "$ ");
+        index_historique = nb_historique;
+
 
         fgets(user_input, 1024, stdin) ;
+
+        // if (!lire(user_input, sizeof(user_input))) continue;
+        
 
         if(user_input[0] == '\0' || strcmp(user_input, "\n") == 0) continue;
 
@@ -239,8 +360,20 @@ int main(int argc, char** argv){
             continue;
         }
 
+        if(strcmp(user_input, "history") == 0){
+            for(int i=0;i<nb_historique;i++){
+                printf("%d: %s\n", i+1, historique[i]);
+            }
+            ajouter_historique(user_input);
+            continue;
+        }
+
+        ajouter_historique(user_input);
+
         parse_and_execute(user_input);
         memset(user_input,0,sizeof(user_input));
     };
+
+    for (int i = 0; i < nb_historique; i++) free(historique[i]);
     return 0;
 }
