@@ -258,26 +258,48 @@ void pasdetecter_touche(struct termios *termios) {
     tcsetattr(STDIN_FILENO, TCSAFLUSH, termios);
 }
 
+// Trouve les fichiers et dossiers correspondant au préfixe donné
 #include <dirent.h>
 #include <ctype.h>
-int afficher_proposition(char **cmd){
+void auto_completion(char *input, size_t *pos) {
     DIR *dir;
     struct dirent *entry;
 
     dir = opendir(".");
-    if(dir == NULL){
+    if (dir == NULL) {
         perror("Impossible d'ouvrir le répertoire");
-        return 1;
+        return;
     }
 
-    while((entry = readdir(dir)) != NULL){
-        if (entry->d_name[0] != '.' && isprint(entry->d_name[0])) {
-            printf("%s ", entry->d_name);
+    char matches[100][256]; // Liste des correspondances
+    int match_count = 0;
+
+    // Parcourt les fichiers du répertoire
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_name[0] == '.') continue;
+        if (strncmp(entry->d_name, input, strlen(input)) == 0) {
+            strcpy(matches[match_count++], entry->d_name);
         }
     }
     closedir(dir);
-    return 0;
+
+    if (match_count == 1) {
+        // Une seule correspondance, compléter automatiquement
+        snprintf(input, 1024, "%s", matches[0]);
+        *pos = strlen(input);
+        printf("\r\33[2K$ %s", input);
+        fflush(stdout);
+    } else if (match_count > 1) {
+        // Plusieurs correspondances, afficher les options
+        printf("\n");
+        for (int i = 0; i < match_count; i++) {
+            printf("%s  ", matches[i]);
+        }
+        printf("\n$ %s", input);
+        fflush(stdout);
+    }
 }
+
 
 //Permet la gestion des fleches haut et bas
 bool lire(char *cmd, size_t size) {
@@ -325,7 +347,8 @@ bool lire(char *cmd, size_t size) {
                     break;
             }
         }else if(c == '\t'){
-            afficher_proposition(&cmd);
+            cmd[pos] = '\0';
+            auto_completion(cmd, &pos);
         }else if (pos < size - 1) { //Autres caracteres
             cmd[pos++] = c;
             printf("%c", c);
