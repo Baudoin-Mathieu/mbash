@@ -111,6 +111,10 @@ struct parsed_command* parse_command(struct command* cmd){
 
     parsed_cmd->args[parsed_cmd->nbr_arg] = NULL ; // NULL terminator pour le execv
 
+    printf("%s\n",parsed_cmd->func);
+    printf("%s\n",parsed_cmd->args[0]);
+    printf("%s\n",parsed_cmd->args[1]);
+
     return parsed_cmd;
 }
 
@@ -203,7 +207,7 @@ void parse_and_execute(char* input){
 
     struct command* cmd = malloc(sizeof(struct command));
     cmd->commande   = strdup(input);
-    cmd->taille  = strlen(input)-1;  // Pour enlever le \n
+    cmd->taille  = strlen(input);  // Pour enlever le \n
     cmd->curseur   = -1 ;
 
     struct parsed_command* parsed_cmd = parse_command(cmd);
@@ -315,7 +319,6 @@ bool lire(char *cmd, size_t size) {
                         pos = 0;
                         cmd[0] = '\0';
                         printf("\r\33[2K$ "); //Vide la ligne
-                        fflush(stdout);
                     }
                     break;
             }
@@ -326,7 +329,9 @@ bool lire(char *cmd, size_t size) {
             printf("%c", c);
         }
     }
+
     pasdetecter_touche(&termios); //Retour a l'etat de base
+    printf("pos :%i\n", pos);
     return pos > 0;
 }
 
@@ -341,18 +346,18 @@ int main(int argc, char** argv){
     char user_input[1024];
 
     while(true) {
-        fprintf(stderr, "$ ");
+        printf("$ ");
         index_historique = nb_historique;
 
+        //fgets(user_input, 1024, stdin) ;
 
-        fgets(user_input, 1024, stdin) ;
+        if (!lire(user_input, sizeof(user_input))) continue;
 
-        // if (!lire(user_input, sizeof(user_input))) continue;
-        
+        printf("%s\n",user_input);
 
         if(user_input[0] == '\0' || strcmp(user_input, "\n") == 0) continue;
 
-        if(strcmp(user_input, "exit\n") == 0) break;
+        if(strcmp(user_input, "exit\n") == 0) continue;
 
         if(strncmp(user_input, "cd ", 3) == 0){
             user_input[strlen(user_input)-1] = '\0';
