@@ -14,7 +14,7 @@ L'objectif de ce projet est de développer un interpréteur de commandes en C qu
 
 [//]: # (![Diagramme]&#40;mbash.png "Diagramme"&#41;)
 
-## Développement du projet
+## Partie 1 : Développement du projet
 
 ### 1. Structure du programme
 
@@ -53,13 +53,40 @@ Cette commande modifie le répertoire de travail actuel du processus.
 La commande `exit` permet de quitter l'interpréteur de commandes.  
 Elle met fin au programme.
 
+
+## Partie 2 : Déploiement
+
+### Coté serveur
+
+#### Mise sous package Debian
+
+Création un répertoire de déploiement
+Et execution avec : `dpkg-buildpackage -us -uc`
+
+Test avec : `sudo dpkg -i mbash.deb` ;
+
+#### Signature
+
+Génération de clé avec `gpg` : `gpg --full-generate-key`
+On applique les clés avec : `debsign -k <ID_CLÉ> mbash-1.0.dsc`
+
+#### Mise en ligne
+
+Mise en ligne avec `reprepro` sur un serveur Apache
+Créer l'arborescence du dépôt et configurer le fichier `distributions`.
+Ajouter des paquets au dépôt : `reprepro -b ~/depot_debian includedeb buster ~/depot_debian/incoming/mbash-1.0.deb`
+Configurer un serveur Apache pour servir le dépôt.
+
+### Coté client
+
+Ajouter le dépôt à la liste des sources sur la machines cliente : `deb http://<serveur>/mbash buster main`
+Installer le paquets depuis le dépôt avec `apt`.
+
 ## Conclusion
 
 Le projet `mbash` permet de simuler un interpréteur de commandes basique avec une gestion de l'historique.  
 Il sert de base pour comprendre la gestion des processus sous Unix et les fonctionnalités d'un shell.  
-La mise en œuvre a permis d'apprendre à manipuler les processus, les signaux et la gestion des entrées/sorties en C.
-
-## Annexes
+La mise en œuvre a permis d'apprendre à manipuler les processus, les signaux et la gestion des entrées/sorties en C ainsi que la distribution de package debian.
 
 ### Code source
 
