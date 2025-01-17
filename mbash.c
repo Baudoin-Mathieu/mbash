@@ -98,7 +98,7 @@ struct parsed_command* parse_command(struct command* cmd){
     }
 
     if(!parsed_cmd->func){
-        parsed_cmd->func = buffer ;
+        parsed_cmd->func = strdup(buffer) ;
         parsed_cmd->nbr_arg = parsed_cmd->nbr_arg+1 ;
         parsed_cmd->args[parsed_cmd->nbr_arg-1] = strdup(buffer) ; 
     }  
@@ -111,9 +111,9 @@ struct parsed_command* parse_command(struct command* cmd){
 
     parsed_cmd->args[parsed_cmd->nbr_arg] = NULL ; // NULL terminator pour le execv
 
-    printf("%s\n",parsed_cmd->func);
-    printf("%s\n",parsed_cmd->args[0]);
-    printf("%s\n",parsed_cmd->args[1]);
+    printf("func %s\n",parsed_cmd->func);
+    printf("arg 1%s\n",parsed_cmd->args[0]);
+    printf("arg 2%s\n",parsed_cmd->args[1]);
 
     return parsed_cmd;
 }
@@ -357,7 +357,7 @@ int main(int argc, char** argv){
 
         if(user_input[0] == '\0' || strcmp(user_input, "\n") == 0) continue;
 
-        if(strcmp(user_input, "exit\n") == 0) continue;
+        if(strcmp(user_input, "exit") == 0) break;
 
         if(strncmp(user_input, "cd ", 3) == 0){
             user_input[strlen(user_input)-1] = '\0';
@@ -379,6 +379,5 @@ int main(int argc, char** argv){
         memset(user_input,0,sizeof(user_input));
     };
 
-    for (int i = 0; i < nb_historique; i++) free(historique[i]);
     return 0;
 }
